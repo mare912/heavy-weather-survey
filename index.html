@@ -14,7 +14,7 @@
   --accent:#1b4f8a; --accent-ink:#ffffff; --accent-soft:#e3ebf6; --head:#11294a;
   --speed:#b4590f; --speed-soft:#fbefe3; --course:#1b6d6a; --course-soft:#e2f2f1;
   --sec-a:#7ea8d8; --sec-b:#cfe0f2; --sec-ink:#163a63; --hull:#eceff3; --hull-line:#4a5466;
-  --ok:#1f7a4d; --err:#b3261e; --note:#fff5dc; --note-ink:#4f3b00;
+  --ok:#1f7a4d; --err:#b3261e; --note:#fde6f0; --note-ink:#6e1440;
   --serif:"Source Serif 4",Georgia,"Times New Roman",serif;
   --sans:"Source Sans 3","Segoe UI",system-ui,-apple-system,Roboto,Helvetica,Arial,sans-serif;
 }
@@ -24,7 +24,7 @@
     --accent:#6aa6e8; --accent-ink:#081323; --accent-soft:#1c2d47; --head:#0a1a30;
     --speed:#f0a35e; --speed-soft:#33251a; --course:#5cc7c1; --course-soft:#15302f;
     --sec-a:#3f6fa6; --sec-b:#22406a; --sec-ink:#e8edf6; --hull:#2a3547; --hull-line:#b7c3d6;
-    --ok:#5cc58d; --err:#ff8a80; --note:#2e2712; --note-ink:#f2dc9b;
+    --ok:#5cc58d; --err:#ff8a80; --note:#3a1729; --note-ink:#f7bcd6;
   }
 }
 :root[data-theme="dark"]{
@@ -32,7 +32,7 @@
   --accent:#6aa6e8; --accent-ink:#081323; --accent-soft:#1c2d47; --head:#0a1a30;
   --speed:#f0a35e; --speed-soft:#33251a; --course:#5cc7c1; --course-soft:#15302f;
   --sec-a:#3f6fa6; --sec-b:#22406a; --sec-ink:#e8edf6; --hull:#2a3547; --hull-line:#b7c3d6;
-  --ok:#5cc58d; --err:#ff8a80; --note:#2e2712; --note-ink:#f2dc9b;
+  --ok:#5cc58d; --err:#ff8a80; --note:#3a1729; --note-ink:#f7bcd6;
 }
 *{box-sizing:border-box}
 html{font-size:18px}
@@ -73,7 +73,8 @@ textarea{min-height:160px;resize:vertical}
 .fields{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:12px 16px}
 .field label{display:block;font-size:.92rem;color:var(--muted);margin-bottom:4px}
 .uin{display:flex;align-items:center;gap:8px}
-.uin em{font-style:normal;color:var(--muted);font-size:.95rem;min-width:28px}
+.uin em{font-style:normal;color:var(--muted);font-size:.95rem;min-width:28px;white-space:nowrap}
+.fields.lim{grid-template-columns:minmax(0,320px)}
 .other{margin-top:10px;max-width:360px}
 .check{display:flex;gap:12px;align-items:flex-start;cursor:pointer;font-weight:600}
 .check input{width:24px;height:24px;margin:1px 0 0;accent-color:var(--accent)}
@@ -186,7 +187,7 @@ svg .sea{stroke:var(--sec-a);stroke-width:2;fill:none}
 /* ===== Postavke: adresa Supabase projekta i javni (publishable) ključ ===== */
 const SUPABASE_URL = 'https://qdzimszxuzkunbbzuxmh.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_PYwX1e_TjtEQcDYPWnisEg_GWzrlZJH';
-const SURVEY_VERSION = 'v3';
+const SURVEY_VERSION = 'v4';
 /* ========================================================================== */
 
 const DEMO = SUPABASE_URL.includes('YOUR-PROJECT');
@@ -222,16 +223,9 @@ const RESPONSES = [
 const usesSpeed = r => ['speed_only', 'speed_then_course', 'course_then_speed', 'both'].includes(r);
 const usesCourse = r => ['course_only', 'speed_then_course', 'course_then_speed', 'both'].includes(r);
 
-/* Broj događaja u 10 minuta (kao u PDF-u); uz q3_0 (period susreta) daje vjerojatnost po valu */
-const FREQ = [
-  o('1', '1 time', 'about once in 10 min'), o('2', '2 times', 'once in 5 min'), o('3-4', '3 – 4 times', 'once in 2–3 min'),
-  o('5-7', '5 – 7 times', 'once in 1.5–2 min'), o('8-10', '8 – 10 times', 'about once a minute'), o('gt10', 'more than 10', 'more often')
-];
-const ROLL = ['5', '10', '15', '20', '25', '30', '35'].map(v => o(v, v + '°')).concat([o('more', 'more than 35°')]);
-const PITCH = ['2', '3', '4', '5', '6', '8'].map(v => o(v, v + '°')).concat([o('more', 'more than 8°'), o('cannot_estimate', 'cannot estimate')]);
 const ACC = [
-  o('1', '1  A standing person occasionally loses balance'), o('2', '2  A standing person must hold on all the time'),
-  o('3', '3  Hard to stand and work even when holding on'), o('4', '4  A seated person slides or falls off the seat')
+  o('1', '1 · STANDING', 'a standing person occasionally loses balance'), o('2', '2 · STANDING', 'a standing person must hold on all the time'),
+  o('3', '3 · STANDING', 'hard to stand and work even when holding on'), o('4', '4 · SITTING', 'a seated person slides or falls off the seat')
 ];
 
 const ROLL_SVG = `<svg viewBox="0 0 280 182" role="img" aria-label="Roll angle is measured from upright to one side">
@@ -267,25 +261,22 @@ const PITCH_SVG = `<svg viewBox="0 0 340 175" role="img" aria-label="Pitch ampli
 
 /* ===== Kriteriji (dio 3): za svaki efekt granica i postupak za brzinu i za kurs ===== */
 const CRITERIA = [
-  { n: 1, slug: 'slamming', name: 'Bow slamming', scale: FREQ, measure: 'number of slams in 10 minutes', when: 'I count this many slams in 10 minutes',
-    note: '<b>Slam</b> = the bow comes out of the water and hits the sea hard; you feel a shock or shudder through the ship.<br>' +
-          '<b>Imagine 10 minutes on the bridge in head seas.</b> How many slams can there be before you act?' },
-  { n: 2, slug: 'green_water', name: 'Green water on deck', scale: FREQ, measure: 'number of times in 10 minutes', when: 'solid water comes on deck this many times in 10 minutes',
-    note: '<b>Green water</b> = solid water (not spray) coming over the bow or bulwark and running along the deck.<br>' +
-          '<b>Imagine you watch the foredeck for 10 minutes.</b> How many times can solid water come on deck before you act?' },
-  { n: 3, slug: 'prop_emergence', name: 'Propeller emergence (racing)', scale: FREQ, measure: 'number of times in 10 minutes', when: 'the propeller races this many times in 10 minutes',
-    note: '<b>Propeller emergence</b> = the propeller comes partly out of the water: the engine races, rpm jumps, or the overspeed protection acts.<br>' +
-          '<b>Imagine 10 minutes on the bridge.</b> How many times can this happen before you act?' },
-  { n: 4, slug: 'rolling', name: 'Rolling', scale: ROLL, measure: 'largest roll to one side in 10 minutes', when: 'the largest roll in 10 minutes reaches',
-    note: '<b>Roll angle = heel to ONE side</b>, from upright (0°), as read on the inclinometer. It is <b>not</b> the total swing from port to starboard.<br>' +
-          'Give the <b>largest roll you would see in about 10 minutes</b> (many inclinometers keep the maximum).<br>' +
-          'Example: in 10 minutes the biggest roll was 20° to starboard → answer <b>20°</b>. Rolling 15° to port and 15° to starboard → <b>15°</b> (not 30°).', diagram: ROLL_SVG },
-  { n: 5, slug: 'pitching', name: 'Pitching', scale: PITCH, measure: 'largest pitch angle in 10 minutes', when: 'the largest pitch in 10 minutes reaches',
-    note: '<b>Pitch angle = how far the bow goes up OR down from level trim.</b> It is <b>not</b> bow-up plus bow-down (peak-to-peak).<br>' +
-          'Give the <b>largest pitch you would see in about 10 minutes</b>.<br>' +
-          'Example: bow goes up 4° and down 4° → answer <b>4°</b> (not 8°). No indicator? Give your best estimate.', diagram: PITCH_SVG },
-  { n: 6, slug: 'accelerations', name: 'Accelerations and motions on the bridge', scale: ACC, wide: true, measure: 'situation on the bridge', when: 'the situation on the bridge reaches',
-    note: 'Choose the situation on the bridge at which you act. Think of a person standing or sitting <b>on the bridge</b>.' }
+  /* unit = upisuje se broj (mjerljivo); scale = odabir s ponuđene skale */
+  { n: 1, slug: 'slamming', name: 'Bow slamming', unit: 'slams in 10 min', measure: 'number of slams in 10 minutes',
+    note: '<b>Slam:</b> the bow hits the water hard and the whole ship shudders.<br>Write the <b>number of slams in 10 minutes</b> (approximately).' },
+  { n: 2, slug: 'green_water', name: 'Green water on deck', unit: 'times in 10 min', measure: 'number of times green water comes on deck in 10 minutes',
+    note: '<b>Green water:</b> solid water (not spray) coming on deck over the bow or bulwark.<br>Write <b>how many times in 10 minutes</b> (approximately).' },
+  { n: 3, slug: 'prop_emergence', name: 'Propeller emergence (racing)', unit: 'times in 10 min', measure: 'number of propeller emergences in 10 minutes',
+    note: '<b>Propeller emergence:</b> the propeller comes out of the water and the engine races.<br>Write <b>how many times in 10 minutes</b> (approximately).' },
+  { n: 4, slug: 'rolling', name: 'Rolling', unit: '° roll', measure: 'roll angle to one side, degrees',
+    note: 'Write the <b>roll angle in degrees, to ONE side</b>, from upright (0°), as read on the inclinometer. It is <b>not</b> the total swing from port to starboard.<br>' +
+          'Example: rolling 15° to port and 15° to starboard → write <b>15</b> (not 30).', diagram: ROLL_SVG },
+  { n: 5, slug: 'pitching', name: 'Pitching', unit: '° pitch', measure: 'pitch angle (bow up or down from level), degrees', unknown: 'I cannot estimate the pitch angle',
+    note: 'Write the <b>pitch angle in degrees</b>: how far the bow goes up OR down from level trim. It is <b>not</b> bow-up plus bow-down.<br>' +
+          'Example: bow goes up 4° and down 4° → write <b>4</b> (not 8). No indicator? Write your best estimate.', diagram: PITCH_SVG },
+  { n: 6, slug: 'accelerations', name: 'Accelerations and motions on the bridge', scale: ACC, wide: true, measure: 'situation on the bridge (1–4)', g: true,
+    note: 'Choose the situation <b>on the bridge</b> at which you act: 1 – 3 for a person <b>standing</b>, 4 for a person <b>sitting</b>.<br>' +
+          'If the bridge has a motion monitor or accelerometer, you can also write the acceleration in g.' }
 ];
 const ck = (c, part) => `q3_${c.n}_${c.slug}_${part}`;
 
@@ -327,13 +318,8 @@ const PAGES = [
       opts: [o('more', 'More cautious'), o('equal', 'Equally cautious'), o('less', 'Less cautious')] }
   ]},
   { id: 'p3', title: '3  Limits for each effect',
-    lead: 'Imagine the fully loaded ship from part 1. For each of the six effects we ask: what you do, your LIMIT (the point where it is no longer acceptable and you act), and what you do then.',
-    items: [
-      { type: 'radio', key: 'q3_0_encounter_period', q: '3.0  First: in heavy weather with head seas, how many seconds are there between two waves hitting the bow?',
-        hint: 'Count from one bow-up to the next bow-up. This tells us how many waves pass in 10 minutes.',
-        opts: [o('4-5', '4 – 5 s'), o('6-7', '6 – 7 s'), o('8-9', '8 – 9 s'), o('10-11', '10 – 11 s'), o('12+', '12 s or more'), o('dont_know', 'don’t know')] },
-      ...CRITERIA.map(c => ({ type: 'criterion', c }))
-    ] },
+    lead: 'Imagine the fully loaded ship from part 1. For each effect, write your LIMIT as a number (the point where it is no longer acceptable and you act) and what you do then.',
+    items: CRITERIA.map(c => ({ type: 'criterion', c })) },
   { id: 'p4', title: '4  Your most recent such situation',
     lead: 'Think of the LAST time you (or your master) reduced speed or altered course because of heavy weather. Answer about that one situation.', items: [
     { type: 'check', key: 'q4_no_experience', label: 'I have never had such a situation – skip to part 5' },
@@ -394,9 +380,9 @@ function itemKeys(it, a) {
     case 'grid21': return ['q2_2_unit', ...G21_ROWS.flatMap(r => G21_COLS.map(c => `q2_2_ss${r}_${c[0]}`))];
     case 'criterion': {
       const c = it.c, r = a && a[ck(c, 'response')];
-      return [ck(c, 'response'),
-        ...(!a || usesSpeed(r) ? [ck(c, 'speed_limit'), ck(c, 'speed_to_kn'), ck(c, 'speed_to_rpm')] : []),
-        ...(!a || usesCourse(r) ? [ck(c, 'course_limit'), ck(c, 'waves_after')] : [])];
+      return [ck(c, 'response'), ...(c.unknown ? [ck(c, 'cannot_estimate')] : []),
+        ...(!a || usesSpeed(r) ? [ck(c, 'speed_limit'), ...(c.g ? [ck(c, 'speed_limit_g')] : []), ck(c, 'speed_to_kn'), ck(c, 'speed_to_rpm')] : []),
+        ...(!a || usesCourse(r) ? [ck(c, 'course_limit'), ...(c.g ? [ck(c, 'course_limit_g')] : []), ck(c, 'waves_after')] : [])];
     }
     case 'check': case 'text': return [it.key];
     default: return [];
@@ -436,23 +422,25 @@ function waveFigure() {
 
 function renderCriterion(c) {
   const name = c.name.toLowerCase();
+  const limit = (part, verb) => c.scale
+    ? `<p class="q">Limit: I ${verb} when it reaches</p>${chips(ck(c, part), c.scale, c.wide)}` +
+      (c.g ? `<div class="fields" style="margin-top:10px">${textInput(ck(c, part + '_g'), 'g', 'measured acceleration (optional)')}</div>` : '')
+    : `<p class="q">Limit: I ${verb} at about</p><div class="fields lim">${textInput(ck(c, part), c.unit, '')}</div>`;
   return `<p class="ctitle">3.${c.n}  ${esc(c.name)}</p>` +
-    (c.hint ? `<p class="hint">${esc(c.hint)}</p>` : '') +
     (c.note ? `<div class="note">${c.note}</div>` : '') +
     (c.diagram ? `<div class="diag">${c.diagram}</div>` : '') +
-    `<p class="q">How do you usually respond to ${esc(name)}?</p>${chips(ck(c, 'response'), RESPONSES)}
-    <div class="panels">
+    `<p class="q">How do you usually respond to ${esc(name)}?</p>${chips(ck(c, 'response'), RESPONSES)}` +
+    (c.unknown ? `<label class="check" style="margin-top:12px;font-weight:500"><input type="checkbox" name="${ck(c, 'cannot_estimate')}" value="yes"><span>${esc(c.unknown)}</span></label>` : '') +
+    `<div class="panels">
       <div class="panel speed" data-panel="speed">
         <h4>Speed reduction</h4>
-        <p class="q">Limit (no longer acceptable): I reduce speed when ${esc(c.when)}</p>
-        ${chips(ck(c, 'speed_limit'), c.scale, c.wide)}
+        ${limit('speed_limit', 'reduce speed')}
         <div class="step"><p class="q">Then I reduce speed and settle at about</p>
           <div class="fields">${textInput(ck(c, 'speed_to_kn'), 'kn', 'speed')}${textInput(ck(c, 'speed_to_rpm'), 'rpm', 'or rpm')}</div></div>
       </div>
       <div class="panel course" data-panel="course">
         <h4>Course alteration</h4>
-        <p class="q">Limit (no longer acceptable): I alter course when ${esc(c.when)}</p>
-        ${chips(ck(c, 'course_limit'), c.scale, c.wide)}
+        ${limit('course_limit', 'alter course')}
         <div class="step"><p class="q">After altering course, I try to have the waves coming from</p>${chips(ck(c, 'waves_after'), SECTOR_OPTS)}</div>
       </div>
     </div>`;
@@ -723,10 +711,14 @@ function codebook() {
     } else if (it.type === 'criterion') {
       const c = it.c, t = `3.${c.n} ${c.name}`;
       rows.push([ck(c, 'response'), `${t} – usual response`, optList(RESPONSES)]);
-      rows.push([ck(c, 'speed_limit'), `${t} – limit for speed reduction (${c.measure})`, optList(c.scale)]);
+      const vals = c.scale ? optList(c.scale) : `number, ${c.unit}`;
+      if (c.unknown) rows.push([ck(c, 'cannot_estimate'), `${t} – ${c.unknown}`, 'yes | (empty)']);
+      rows.push([ck(c, 'speed_limit'), `${t} – limit for speed reduction (${c.measure})`, vals]);
+      if (c.g) rows.push([ck(c, 'speed_limit_g'), `${t} – limit for speed reduction, measured`, 'number, g']);
       rows.push([ck(c, 'speed_to_kn'), `${t} – speed reduced to`, 'number, kn']);
       rows.push([ck(c, 'speed_to_rpm'), `${t} – speed reduced to`, 'number, rpm']);
-      rows.push([ck(c, 'course_limit'), `${t} – limit for course alteration (${c.measure})`, optList(c.scale)]);
+      rows.push([ck(c, 'course_limit'), `${t} – limit for course alteration (${c.measure})`, vals]);
+      if (c.g) rows.push([ck(c, 'course_limit_g'), `${t} – limit for course alteration, measured`, 'number, g']);
       rows.push([ck(c, 'waves_after'), `${t} – preferred wave direction after alteration`, optList(SECTOR_OPTS)]);
     }
     else if (it.type === 'check') rows.push([it.key, it.label, 'yes | (empty)']);
