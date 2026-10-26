@@ -186,7 +186,7 @@ svg .sea{stroke:var(--sec-a);stroke-width:2;fill:none}
 /* ===== Postavke: adresa Supabase projekta i javni (publishable) ključ ===== */
 const SUPABASE_URL = 'https://qdzimszxuzkunbbzuxmh.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_PYwX1e_TjtEQcDYPWnisEg_GWzrlZJH';
-const SURVEY_VERSION = 'v2';
+const SURVEY_VERSION = 'v3';
 /* ========================================================================== */
 
 const DEMO = SUPABASE_URL.includes('YOUR-PROJECT');
@@ -208,7 +208,8 @@ const SEA = [
 const SECTORS = ['head seas', 'bow quartering', 'beam seas', 'stern quartering', 'following seas'];
 const SECTOR_KEYS = ['head', 'bow_quartering', 'beam', 'stern_quartering', 'following'];
 const EFFECTS = ['bow slamming', 'green water on deck', 'propeller emergence', 'rolling', 'pitching', 'accelerations on the bridge'];
-const SECTOR_OPTS = SECTORS.map((s, i) => o(String(i + 1), (i + 1) + ' ' + s));
+const SECTOR_DEG = ['0–30°', '30–70°', '70–110°', '110–150°', '150–180°'];
+const SECTOR_OPTS = SECTORS.map((s, i) => o(String(i + 1), (i + 1) + ' ' + s, SECTOR_DEG[i] + ' off the bow'));
 
 const RESPONSES = [
   o('speed_only', 'Reduce speed only'),
@@ -221,9 +222,10 @@ const RESPONSES = [
 const usesSpeed = r => ['speed_only', 'speed_then_course', 'course_then_speed', 'both'].includes(r);
 const usesCourse = r => ['course_only', 'speed_then_course', 'course_then_speed', 'both'].includes(r);
 
+/* Broj događaja u 10 minuta (kao u PDF-u); uz q3_0 (period susreta) daje vjerojatnost po valu */
 const FREQ = [
-  o('1', '1 in 10 min', '≈ 1 per 10 min'), o('2', '1 in 5 min', '≈ 2 per 10 min'), o('3-4', 'every 2–3 min', '3–4 per 10 min'),
-  o('5-7', 'every 1.5–2 min', '5–7 per 10 min'), o('8-10', 'about every minute', '8–10 per 10 min'), o('gt10', 'more often', '> 10 per 10 min')
+  o('1', '1 time', 'about once in 10 min'), o('2', '2 times', 'once in 5 min'), o('3-4', '3 – 4 times', 'once in 2–3 min'),
+  o('5-7', '5 – 7 times', 'once in 1.5–2 min'), o('8-10', '8 – 10 times', 'about once a minute'), o('gt10', 'more than 10', 'more often')
 ];
 const ROLL = ['5', '10', '15', '20', '25', '30', '35'].map(v => o(v, v + '°')).concat([o('more', 'more than 35°')]);
 const PITCH = ['2', '3', '4', '5', '6', '8'].map(v => o(v, v + '°')).concat([o('more', 'more than 8°'), o('cannot_estimate', 'cannot estimate')]);
@@ -265,21 +267,25 @@ const PITCH_SVG = `<svg viewBox="0 0 340 175" role="img" aria-label="Pitch ampli
 
 /* ===== Kriteriji (dio 3): za svaki efekt granica i postupak za brzinu i za kurs ===== */
 const CRITERIA = [
-  { n: 1, slug: 'slamming', name: 'Bow slamming', scale: FREQ, measure: 'how often it happens', when: 'slamming happens',
-    hint: 'Think of how many slams you would count in about 10 minutes.' },
-  { n: 2, slug: 'green_water', name: 'Green water on deck', scale: FREQ, measure: 'how often it happens', when: 'green water comes on deck',
-    hint: 'Think of how many times green seas would come on deck in about 10 minutes.' },
-  { n: 3, slug: 'prop_emergence', name: 'Propeller emergence (racing)', scale: FREQ, measure: 'how often it happens', when: 'the propeller comes out of the water',
-    hint: 'Think of how many times the propeller would come out of the water (engine racing) in about 10 minutes.' },
-  { n: 4, slug: 'rolling', name: 'Rolling', scale: ROLL, measure: 'roll angle to one side', when: 'the roll angle (one side) reaches',
-    note: '<b>Roll angle = heel to ONE side</b>, read on the inclinometer: from upright (0°) to the largest heel on one side. ' +
-          'It is <b>not</b> the total swing from port to starboard. Example: rolling 15° to port and 15° to starboard → answer <b>15°</b> (not 30°). ' +
-          'Take the largest rolls that keep recurring, not a single exceptional roll.', diagram: ROLL_SVG },
-  { n: 5, slug: 'pitching', name: 'Pitching', scale: PITCH, measure: 'pitch amplitude', when: 'the pitch amplitude reaches',
-    note: '<b>Pitch amplitude = angle of the bow up OR down from level trim</b> (single amplitude). ' +
-          'It is <b>not</b> peak-to-peak (bow-up to bow-down). Example: bow rises 4° and falls 4° → answer <b>4°</b> (not 8°). ' +
-          'If you have no indicator, give your best estimate.', diagram: PITCH_SVG },
-  { n: 6, slug: 'accelerations', name: 'Accelerations and motions on the bridge', scale: ACC, wide: true, measure: 'what it feels like on the bridge', when: 'conditions on the bridge reach' }
+  { n: 1, slug: 'slamming', name: 'Bow slamming', scale: FREQ, measure: 'number of slams in 10 minutes', when: 'I count this many slams in 10 minutes',
+    note: '<b>Slam</b> = the bow comes out of the water and hits the sea hard; you feel a shock or shudder through the ship.<br>' +
+          '<b>Imagine 10 minutes on the bridge in head seas.</b> How many slams can there be before you act?' },
+  { n: 2, slug: 'green_water', name: 'Green water on deck', scale: FREQ, measure: 'number of times in 10 minutes', when: 'solid water comes on deck this many times in 10 minutes',
+    note: '<b>Green water</b> = solid water (not spray) coming over the bow or bulwark and running along the deck.<br>' +
+          '<b>Imagine you watch the foredeck for 10 minutes.</b> How many times can solid water come on deck before you act?' },
+  { n: 3, slug: 'prop_emergence', name: 'Propeller emergence (racing)', scale: FREQ, measure: 'number of times in 10 minutes', when: 'the propeller races this many times in 10 minutes',
+    note: '<b>Propeller emergence</b> = the propeller comes partly out of the water: the engine races, rpm jumps, or the overspeed protection acts.<br>' +
+          '<b>Imagine 10 minutes on the bridge.</b> How many times can this happen before you act?' },
+  { n: 4, slug: 'rolling', name: 'Rolling', scale: ROLL, measure: 'largest roll to one side in 10 minutes', when: 'the largest roll in 10 minutes reaches',
+    note: '<b>Roll angle = heel to ONE side</b>, from upright (0°), as read on the inclinometer. It is <b>not</b> the total swing from port to starboard.<br>' +
+          'Give the <b>largest roll you would see in about 10 minutes</b> (many inclinometers keep the maximum).<br>' +
+          'Example: in 10 minutes the biggest roll was 20° to starboard → answer <b>20°</b>. Rolling 15° to port and 15° to starboard → <b>15°</b> (not 30°).', diagram: ROLL_SVG },
+  { n: 5, slug: 'pitching', name: 'Pitching', scale: PITCH, measure: 'largest pitch angle in 10 minutes', when: 'the largest pitch in 10 minutes reaches',
+    note: '<b>Pitch angle = how far the bow goes up OR down from level trim.</b> It is <b>not</b> bow-up plus bow-down (peak-to-peak).<br>' +
+          'Give the <b>largest pitch you would see in about 10 minutes</b>.<br>' +
+          'Example: bow goes up 4° and down 4° → answer <b>4°</b> (not 8°). No indicator? Give your best estimate.', diagram: PITCH_SVG },
+  { n: 6, slug: 'accelerations', name: 'Accelerations and motions on the bridge', scale: ACC, wide: true, measure: 'situation on the bridge', when: 'the situation on the bridge reaches',
+    note: 'Choose the situation on the bridge at which you act. Think of a person standing or sitting <b>on the bridge</b>.' }
 ];
 const ck = (c, part) => `q3_${c.n}_${c.slug}_${part}`;
 
@@ -301,7 +307,9 @@ const PAGES = [
       { key: 'q1_4_breadth_m', label: 'Breadth', unit: 'm' },
       { key: 'q1_4_laden_draught_m', label: 'Laden draught', unit: 'm' },
       { key: 'q1_4_sea_speed_kn', label: 'Normal sea speed', unit: 'kn' },
-      { key: 'q1_4_sea_speed_rpm', label: 'at', unit: 'rpm' }] },
+      { key: 'q1_4_sea_speed_rpm', label: 'at', unit: 'rpm' },
+      { key: 'q1_4_roll_period_s', label: 'Roll period, loaded (if known)', unit: 's' },
+      { key: 'q1_4_gm_m', label: 'GM, loaded (if known)', unit: 'm' }] },
     { type: 'radio', sub: true, key: 'q1_4_propeller', q: 'Propeller',
       opts: [o('fixed_pitch', 'Fixed pitch'), o('cpp', 'Controllable pitch (CPP)')] }
   ]},
@@ -319,30 +327,43 @@ const PAGES = [
       opts: [o('more', 'More cautious'), o('equal', 'Equally cautious'), o('less', 'Less cautious')] }
   ]},
   { id: 'p3', title: '3  Limits for each effect',
-    lead: 'For each of the six effects: how do you respond, at what point it becomes unacceptable, and what you do then. Imagine the fully loaded ship from part 1.',
-    items: CRITERIA.map(c => ({ type: 'criterion', c })) },
+    lead: 'Imagine the fully loaded ship from part 1. For each of the six effects we ask: what you do, your LIMIT (the point where it is no longer acceptable and you act), and what you do then.',
+    items: [
+      { type: 'radio', key: 'q3_0_encounter_period', q: '3.0  First: in heavy weather with head seas, how many seconds are there between two waves hitting the bow?',
+        hint: 'Count from one bow-up to the next bow-up. This tells us how many waves pass in 10 minutes.',
+        opts: [o('4-5', '4 – 5 s'), o('6-7', '6 – 7 s'), o('8-9', '8 – 9 s'), o('10-11', '10 – 11 s'), o('12+', '12 s or more'), o('dont_know', 'don’t know')] },
+      ...CRITERIA.map(c => ({ type: 'criterion', c }))
+    ] },
   { id: 'p4', title: '4  Your most recent such situation',
-    lead: 'Think of the most recent case when speed was reduced or course altered because of heavy weather.', items: [
-    { type: 'check', key: 'q4_no_experience', label: 'I have no such experience – skip to part 5' },
+    lead: 'Think of the LAST time you (or your master) reduced speed or altered course because of heavy weather. Answer about that one situation.', items: [
+    { type: 'check', key: 'q4_no_experience', label: 'I have never had such a situation – skip to part 5' },
     ...[
-      { type: 'radio', key: 'q4_1_sea_state', q: '4.1  Sea state', opts: SEA },
-      { type: 'radio', key: 'q4_2_wave_direction', q: '4.2  Wave direction', opts: SECTOR_OPTS },
-      { type: 'radio', key: 'q4_3_loading', q: '4.3  Loading condition',
+      { type: 'radio', key: 'q4_0_same_ship', q: '4.0  Was it on the ship you described in part 1?',
+        opts: [o('yes', 'Yes'), o('no', 'No, another ship')] },
+      { type: 'radio', key: 'q4_1_sea_state', q: '4.1  How rough was the sea when you decided to act?',
+        hint: 'Choose the sea state. The numbers below are the significant wave height Hs (the height of the bigger waves, as you would estimate it from the bridge).', opts: SEA },
+      { type: 'fields', sub: true, q: 'If you remember (optional)', fields: [
+        { key: 'q4_1_wave_height_m', label: 'Wave height you estimated', unit: 'm' },
+        { key: 'q4_1_wave_period_s', label: 'Wave period', unit: 's' },
+        { key: 'q4_1_wind_bft', label: 'Wind force', unit: 'Bft' }] },
+      { type: 'radio', key: 'q4_2_wave_direction', q: '4.2  Before you acted, where were the waves coming from, relative to the bow?',
+        hint: 'Sectors as in the figure in the introduction (0° = waves straight on the bow).', opts: SECTOR_OPTS },
+      { type: 'radio', key: 'q4_3_loading', q: '4.3  How was the ship loaded?',
         opts: [o('full', 'Fully loaded'), o('partly', 'Partly loaded'), o('ballast', 'In ballast')] },
-      { type: 'radio', key: 'q4_4_main_reason', q: '4.4  Which effect was the main reason for your decision?',
-        opts: [o('slamming', 'Bow slamming'), o('green_water', 'Green water'), o('prop_emergence', 'Propeller emergence'), o('rolling', 'Rolling'),
-               o('pitching', 'Pitching'), o('accelerations', 'Accelerations'), o('cargo_risk', 'Risk to cargo'), o('other', 'Other')],
+      { type: 'radio', key: 'q4_4_main_reason', q: '4.4  What was the MAIN reason you decided to act?',
+        opts: [o('slamming', 'Bow slamming'), o('green_water', 'Green water on deck'), o('prop_emergence', 'Propeller emergence'), o('rolling', 'Rolling'),
+               o('pitching', 'Pitching'), o('accelerations', 'Accelerations on the bridge'), o('cargo_risk', 'Risk to cargo'), o('other', 'Other')],
         other: 'q4_4_main_reason_other' },
       { type: 'radio', key: 'q4_5_action', q: '4.5  What did you do?',
-        opts: [o('speed', 'Reduced speed'), o('course', 'Altered course'), o('both', 'Both')] },
-      { type: 'fields', sub: true, q: 'Speed', showIf: a => a.q4_5_action === 'speed' || a.q4_5_action === 'both', fields: [
-        { key: 'q4_5_speed_before_kn', label: 'Before', unit: 'kn' },
-        { key: 'q4_5_speed_before_rpm', label: 'Before', unit: 'rpm' },
-        { key: 'q4_5_speed_after_kn', label: 'After', unit: 'kn' },
-        { key: 'q4_5_speed_after_rpm', label: 'After', unit: 'rpm' }] },
-      { type: 'fields', sub: true, q: 'Course', showIf: a => a.q4_5_action === 'course' || a.q4_5_action === 'both',
-        fields: [{ key: 'q4_5_altered_by_deg', label: 'Altered by', unit: '°' }] },
-      { type: 'radio', sub: true, key: 'q4_5_new_wave_direction', q: '… so that the waves came from sector',
+        opts: [o('speed', 'Reduced speed only'), o('course', 'Altered course only'), o('both', 'Reduced speed and altered course')] },
+      { type: 'fields', sub: true, q: 'Speed: before and after you acted', showIf: a => a.q4_5_action === 'speed' || a.q4_5_action === 'both', fields: [
+        { key: 'q4_5_speed_before_kn', label: 'Speed before', unit: 'kn' },
+        { key: 'q4_5_speed_before_rpm', label: '(rpm before)', unit: 'rpm' },
+        { key: 'q4_5_speed_after_kn', label: 'Speed after', unit: 'kn' },
+        { key: 'q4_5_speed_after_rpm', label: '(rpm after)', unit: 'rpm' }] },
+      { type: 'fields', sub: true, q: 'Course: by how many degrees did you alter course?', showIf: a => a.q4_5_action === 'course' || a.q4_5_action === 'both',
+        fields: [{ key: 'q4_5_altered_by_deg', label: 'Course altered by', unit: '°' }] },
+      { type: 'radio', sub: true, key: 'q4_5_new_wave_direction', q: 'After the alteration, the waves were coming from',
         showIf: a => a.q4_5_action === 'course' || a.q4_5_action === 'both', opts: SECTOR_OPTS }
     ].map(it => Object.assign(it, { showIf: and(it.showIf, a => a.q4_no_experience !== 'yes') }))
   ]},
@@ -425,14 +446,14 @@ function renderCriterion(c) {
         <h4>Speed reduction</h4>
         <p class="q">Limit (no longer acceptable): I reduce speed when ${esc(c.when)}</p>
         ${chips(ck(c, 'speed_limit'), c.scale, c.wide)}
-        <div class="step"><p class="q">Then I reduce to about</p>
+        <div class="step"><p class="q">Then I reduce speed and settle at about</p>
           <div class="fields">${textInput(ck(c, 'speed_to_kn'), 'kn', 'speed')}${textInput(ck(c, 'speed_to_rpm'), 'rpm', 'or rpm')}</div></div>
       </div>
       <div class="panel course" data-panel="course">
         <h4>Course alteration</h4>
         <p class="q">Limit (no longer acceptable): I alter course when ${esc(c.when)}</p>
         ${chips(ck(c, 'course_limit'), c.scale, c.wide)}
-        <div class="step"><p class="q">Then I prefer the waves coming from</p>${chips(ck(c, 'waves_after'), SECTOR_OPTS)}</div>
+        <div class="step"><p class="q">After altering course, I try to have the waves coming from</p>${chips(ck(c, 'waves_after'), SECTOR_OPTS)}</div>
       </div>
     </div>`;
 }
