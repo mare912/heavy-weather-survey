@@ -275,9 +275,8 @@ const CRITERIA = [
   { n: 5, slug: 'pitching', name: 'Pitching', unit: '° pitch', measure: 'pitch angle (bow up or down from level), degrees', unknown: 'I cannot estimate the pitch angle',
     note: 'Write the <b>pitch angle in degrees</b>: how far the bow goes up OR down from level trim. It is <b>not</b> bow-up plus bow-down.<br>' +
           'Example: bow goes up 4° and down 4° → write <b>4</b> (not 8). No indicator? Write your best estimate.', diagram: PITCH_SVG },
-  { n: 6, slug: 'accelerations', name: 'Accelerations and motions on the bridge', scale: ACC, wide: true, measure: 'situation on the bridge (1–4)', g: true,
-    note: 'Choose the situation <b>on the bridge</b> at which you act: 1 – 3 for a person <b>standing</b>, 4 for a person <b>sitting</b>.<br>' +
-          'If the bridge has a motion monitor or accelerometer, you can also write the acceleration in g.' }
+  { n: 6, slug: 'accelerations', name: 'Accelerations and motions on the bridge', scale: ACC, wide: true, measure: 'situation on the bridge (1–4)',
+    note: 'Choose the situation <b>on the bridge</b> at which you act: 1 – 3 for a person <b>standing</b>, 4 for a person <b>sitting</b>.' }
 ];
 const ck = (c, part) => `q3_${c.n}_${c.slug}_${part}`;
 
