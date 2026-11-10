@@ -85,10 +85,12 @@ table.g td.rl{text-align:left;white-space:nowrap}
 table.g td.rl small{display:block;color:var(--muted)}
 table.g input{text-align:center;padding:9px 4px}
 .sg{display:grid;gap:0;border:1px solid var(--line);border-radius:12px;overflow:hidden}
-.sg-row{display:grid;grid-template-columns:200px 1fr 1fr 1fr;align-items:center;gap:12px;padding:10px 14px;border-top:1px solid var(--line)}
+.sg-row{display:grid;grid-template-columns:180px repeat(4,1fr);align-items:center;gap:12px;padding:10px 14px;border-top:1px solid var(--line)}
 .sg-row:first-child{border-top:0}
 .sg-head{background:var(--accent-soft);font-weight:700;font-size:.95rem}
-.sg-head .c-speed{color:var(--speed)} .sg-head .c-course{color:var(--course)}
+.sg-head .c-speed{color:var(--speed)} .sg-head .c-course{color:var(--course)} .sg-head .c-both{color:var(--accent)}
+.legend.effects li{display:flex;gap:4px;padding:5px 0}
+.legend.effects b.en{display:inline;min-width:0;color:var(--ink)}
 .sg-row .rlab{font-weight:600}
 .sg-row .cl{display:none;font-size:.85rem;color:var(--muted);margin-bottom:2px}
 .figwrap{display:flex;flex-wrap:wrap;gap:28px;align-items:center;justify-content:center}
@@ -186,9 +188,9 @@ dialog.ref::backdrop{background:rgba(5,12,24,.55)}
   </div>
 </header>
 <main class="wrap" id="app"></main>
-<button type="button" class="fab hidden" id="refBtn" aria-haspopup="dialog"><span aria-hidden="true">ⓘ</span> Sea states &amp; wave directions</button>
-<dialog class="ref" id="refDlg" aria-label="Sea states and wave directions">
-  <div class="ref-head"><b>Sea states &amp; wave directions</b><button type="button" class="btn ghost" id="refClose">Close ✕</button></div>
+<button type="button" class="fab hidden" id="refBtn" aria-haspopup="dialog"><span aria-hidden="true">ⓘ</span> Beaufort scale &amp; wave directions</button>
+<dialog class="ref" id="refDlg" aria-label="Beaufort scale and wave directions">
+  <div class="ref-head"><b>Beaufort scale &amp; wave directions</b><button type="button" class="btn ghost" id="refClose">Close ✕</button></div>
   <div class="ref-body" id="refBody"></div>
 </dialog>
 <footer class="foot">
@@ -204,7 +206,7 @@ dialog.ref::backdrop{background:rgba(5,12,24,.55)}
 /* ===== Postavke: adresa Supabase projekta i javni (publishable) ključ ===== */
 const SUPABASE_URL = 'https://qdzimszxuzkunbbzuxmh.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_PYwX1e_TjtEQcDYPWnisEg_GWzrlZJH';
-const SURVEY_VERSION = 'v4';
+const SURVEY_VERSION = 'v5';
 /* ========================================================================== */
 
 const DEMO = SUPABASE_URL.includes('YOUR-PROJECT');
@@ -219,15 +221,37 @@ const store = {
   del(k) { try { localStorage.removeItem(k); } catch (e) {} }
 };
 
-const SEA = [
-  o('4', '4', 'Hs 1.25–2.5 m'), o('5', '5', 'Hs 2.5–4 m'), o('6', '6', 'Hs 4–6 m'),
-  o('7', '7', 'Hs 6–9 m'), o('8', '8', 'Hs 9–14 m'), o('9', '9', 'Hs > 14 m')
+/* Beaufort (WMO): stupanj, opis, vjetar u čvorovima, vjerojatna – najveća visina valova na otvorenom moru */
+const BFT = [
+  ['5', 'fresh breeze', '17–21', '2–2.5'], ['6', 'strong breeze', '22–27', '3–4'], ['7', 'near gale', '28–33', '4–5.5'],
+  ['8', 'gale', '34–40', '5.5–7.5'], ['9', 'strong gale', '41–47', '7–10'], ['10', 'storm', '48–55', '9–12.5'],
+  ['11', 'violent storm', '56–63', '11.5–16'], ['12', 'hurricane', '64 and more', '14 and more']
 ];
-const SECTORS = ['head seas', 'bow quartering', 'beam seas', 'stern quartering', 'following seas'];
-const SECTOR_KEYS = ['head', 'bow_quartering', 'beam', 'stern_quartering', 'following'];
+const BFT_OPTS = BFT.map(b => o(b[0], 'Bft ' + b[0], 'waves ' + b[3] + ' m'));
+const SECTORS = ['head seas', 'bow quartering', 'beam seas, forward', 'beam seas, aft', 'stern quartering', 'following seas'];
+const SECTOR_KEYS = ['head', 'bow_quartering', 'beam_fwd', 'beam_aft', 'stern_quartering', 'following'];
+const SECTOR_B = [0, 30, 60, 90, 120, 150, 180];
 const EFFECTS = ['bow slamming', 'green water on deck', 'propeller emergence', 'rolling', 'pitching', 'accelerations on the bridge'];
-const SECTOR_DEG = ['0–30°', '30–70°', '70–110°', '110–150°', '150–180°'];
-const SECTOR_OPTS = SECTORS.map((s, i) => o(String(i + 1), (i + 1) + ' ' + s, SECTOR_DEG[i] + ' off the bow'));
+const EFFECT_DESC = [
+  'the bow comes out of a wave and hits the water hard, so the whole ship shudders.',
+  'solid water (not spray) comes over the bow or bulwark onto the deck – also called solid water or boarding seas.',
+  'the propeller comes partly out of the water and the engine races.',
+  'the ship heels from side to side, to port and to starboard.',
+  'the bow rises and falls in the waves (bow up, bow down).',
+  'sudden motions that make it hard to stand, walk or work on the bridge.'
+];
+
+/* Smjer valova u odnosu na pramac: fino po 5° u zadanim rasponima, inače grubo po 45° */
+function angleOpts(fine) {
+  const out = [];
+  for (let a = 0; a < 180;) {
+    const step = fine.some(([f0, f1]) => a >= f0 && a < f1) ? 5 : 45;
+    out.push(o(`${a}-${a + step}`, `${a}–${a + step}°`));
+    a += step;
+  }
+  return out;
+}
+const SPEED_PCT = ['0-10', '10-20', '20-30', '30-40', '40-50', '50-60', '60-70'].map(v => o(v, v.replace('-', '–') + ' %')).concat([o('gt70', 'more than 70 %')]);
 
 const RESPONSES = [
   o('speed_only', 'Reduce speed only'),
@@ -243,7 +267,15 @@ const usesCourse = r => !r || ['course_only', 'speed_then_course', 'course_then_
 
 const ACC = [
   o('1', '1 · STANDING', 'a standing person occasionally loses balance'), o('2', '2 · STANDING', 'a standing person must hold on all the time'),
-  o('3', '3 · STANDING', 'hard to stand and work even when holding on'), o('4', '4 · SITTING', 'a seated person slides or falls off the seat')
+  o('3', '3 · STANDING', 'hard to stand and work even when holding on'), o('4', '4 · STANDING', 'unable to stand')
+];
+/* Opisna skala posrtanja (sinteza: Chen i sur. 2020, NORDFORSK 1987, OPNAVINST 3100.7C) */
+const PITCH = [
+  o('0', '0 · NO PITCHING', 'barely noticeable, normal work and walking (< 1°)'),
+  o('1', '1 · SLIGHT', 'bow rises and falls rhythmically, no spray over the bow (1–2°)'),
+  o('2', '2 · MODERATE', 'spray over the bow, you hold on when walking (2–4°)'),
+  o('3', '3 · HEAVY', 'occasional green water and slamming, deck work limited (4–6°)'),
+  o('4', '4 · VIOLENT', 'frequent heavy slamming and hull vibration, deck flooded, heaving to considered (> 6°)')
 ];
 
 const ROLL_SVG = `<svg viewBox="0 0 280 182" role="img" aria-label="Roll angle is measured from upright to one side">
@@ -280,20 +312,25 @@ const PITCH_SVG = `<svg viewBox="0 0 340 175" role="img" aria-label="Pitch ampli
 /* ===== Kriteriji (dio 3): za svaki efekt granica i postupak za brzinu i za kurs ===== */
 const CRITERIA = [
   /* unit = upisuje se broj (mjerljivo); scale = odabir s ponuđene skale */
-  { n: 1, slug: 'slamming', name: 'Bow slamming', unit: 'slams in 10 min', measure: 'number of slams in 10 minutes',
+  /* fine = rasponi smjera valova (° od pramca) s finom podjelom po 5°; courseFirst = okvir za kurs lijevo */
+  { n: 1, slug: 'slamming', name: 'Bow slamming', unit: 'slams in 10 min', measure: 'number of slams in 10 minutes', fine: [[0, 45]],
     note: '<b>Slam:</b> the bow hits the water hard and the whole ship shudders.<br>Write the <b>number of slams in 10 minutes</b> (approximately).' },
-  { n: 2, slug: 'green_water', name: 'Green water on deck', unit: 'times in 10 min', measure: 'number of times green water comes on deck in 10 minutes',
-    note: '<b>Green water:</b> solid water (not spray) coming on deck over the bow or bulwark.<br>Write <b>how many times in 10 minutes</b> (approximately).' },
+  { n: 2, slug: 'green_water', name: 'Green water on deck (solid water / boarding seas)', unit: 'times in 10 min', measure: 'number of times green water comes on deck in 10 minutes', fine: [[0, 45]],
+    note: '<b>Green water (solid water, boarding seas):</b> solid water (not spray) coming on deck over the bow or bulwark.<br>Write <b>how many times in 10 minutes</b> (approximately).' },
   { n: 3, slug: 'prop_emergence', name: 'Propeller emergence (racing)', unit: 'times in 10 min', measure: 'number of propeller emergences in 10 minutes',
+    speedChange: true, fine: [[0, 45], [135, 180]],
     note: '<b>Propeller emergence:</b> the propeller comes out of the water and the engine races.<br>Write <b>how many times in 10 minutes</b> (approximately).' },
-  { n: 4, slug: 'rolling', name: 'Rolling', unit: '° roll', measure: 'roll angle to one side, degrees',
+  { n: 4, slug: 'rolling', name: 'Rolling', unit: '° roll', measure: 'roll angle to one side, degrees', gm: true,
+    courseFirst: true, speedChange: true, fine: [[45, 135]],
     note: 'Write the <b>roll angle in degrees, to ONE side</b>, from upright (0°), as read on the inclinometer. It is <b>not</b> the total swing from port to starboard.<br>' +
           'Example: rolling 15° to port and 15° to starboard → write <b>15</b> (not 30).', diagram: ROLL_SVG },
-  { n: 5, slug: 'pitching', name: 'Pitching', unit: '° pitch', measure: 'pitch angle (bow up or down from level), degrees', unknown: 'I cannot estimate the pitch angle',
-    note: 'Write the <b>pitch angle in degrees</b>: how far the bow goes up OR down from level trim. It is <b>not</b> bow-up plus bow-down.<br>' +
-          'Example: bow goes up 4° and down 4° → write <b>4</b> (not 8). No indicator? Write your best estimate.', diagram: PITCH_SVG },
+  { n: 5, slug: 'pitching', name: 'Pitching', scale: PITCH, wide: true, deg: '° pitch', measure: 'pitching level (0–4)',
+    courseFirst: true, fine: [[0, 45]],
+    note: 'Choose the description that fits best. The degrees in brackets are only a guide: the <b>usual largest angle the bow goes up OR down</b> from level trim (not up plus down).<br>' +
+          'If you know the pitch angle in degrees (e.g. from a motion indicator), write it in the box as well.', diagram: PITCH_SVG },
   { n: 6, slug: 'accelerations', name: 'Accelerations and motions on the bridge', scale: ACC, wide: true, measure: 'situation on the bridge (1–4)',
-    note: 'Choose the situation <b>on the bridge</b> at which you act: 1 – 3 for a person <b>standing</b>, 4 for a person <b>sitting</b>.' }
+    fine: [[0, 45], [135, 180]],
+    note: 'Choose the situation <b>on the bridge</b> at which you act, for a person <b>standing</b> on the bridge.' }
 ];
 const ck = (c, part) => `q3_${c.n}_${c.slug}_${part}`;
 
@@ -302,37 +339,35 @@ const PAGES = [
   { id: 'intro', title: 'Introduction', items: [{ type: 'intro' }] },
   { id: 'p1', title: '1  About you and your ship', items: [
     { type: 'radio', key: 'q1_1_rank', q: '1.1  Your rank',
-      opts: [o('master', 'Master'), o('chief_officer', 'Chief officer'), o('2nd_3rd_officer', '2nd / 3rd officer'), o('other', 'Other')],
-      other: 'q1_1_rank_other' },
+      opts: [o('master', 'Master'), o('chief_officer', 'Chief officer'), o('2nd_3rd_officer', '2nd / 3rd officer')] },
     { type: 'radio', key: 'q1_2_sea_service', q: '1.2  Sea service (years)',
       opts: [o('lt2', 'less than 2'), o('2-5', '2 – 5'), o('6-10', '6 – 10'), o('11-20', '11 – 20'), o('gt20', 'more than 20')] },
     { type: 'radio', key: 'q1_3_ship_type', q: '1.3  Type of your last ship', hint: 'All further questions refer to this ship.',
       opts: [o('container', 'Container ship'), o('bulk', 'Bulk carrier'), o('tanker', 'Tanker'), o('lng_lpg', 'LNG / LPG carrier'),
-             o('general_cargo', 'General cargo'), o('roro_pax', 'Ro-Ro / passenger'), o('offshore', 'Offshore'), o('other', 'Other')],
-      other: 'q1_3_ship_type_other' },
+             o('general_cargo', 'General cargo'), o('roro', 'Ro-Ro'), o('passenger', 'Passenger / Ro-Pax'), o('cruise', 'Cruise ship')] },
     { type: 'fields', q: '1.4  Main particulars of that ship', hint: 'As far as you know.', fields: [
       { key: 'q1_4_length_m', label: 'Length', unit: 'm' },
       { key: 'q1_4_breadth_m', label: 'Breadth', unit: 'm' },
-      { key: 'q1_4_laden_draught_m', label: 'Laden draught', unit: 'm' },
+      { key: 'q1_4_draught_m', label: 'Draught', unit: 'm' },
       { key: 'q1_4_sea_speed_kn', label: 'Normal sea speed', unit: 'kn' },
       { key: 'q1_4_sea_speed_rpm', label: 'at', unit: 'rpm' },
-      { key: 'q1_4_roll_period_s', label: 'Roll period, loaded (if known)', unit: 's' },
-      { key: 'q1_4_gm_m', label: 'GM, loaded (if known)', unit: 'm' }] },
+      { key: 'q1_4_roll_period_s', label: 'Roll period (if known)', unit: 's' },
+      { key: 'q1_4_gm_m', label: 'GM (if known)', unit: 'm' }] },
     { type: 'radio', sub: true, key: 'q1_4_propeller', q: 'Propeller',
       opts: [o('fixed_pitch', 'Fixed pitch'), o('cpp', 'Controllable pitch (CPP)')] }
   ]},
   { id: 'p2', title: '2  When do you first act?', lead: 'Imagine the ship from part 1, fully loaded.', items: [
-    { type: 'selgrid', key: 'q2_1', q: '2.1  At which sea state do you FIRST reduce speed, and at which do you FIRST alter course?',
-      hint: 'Answer for each wave direction. If you do both at the same sea state, choose the same sea state in both columns. Choose “never” if you would not do it in that direction.',
+    { type: 'selgrid', key: 'q2_1', q: '2.1  At which wind force do you FIRST reduce speed, FIRST alter course, or FIRST do both?',
+      hint: 'Answer for each wave direction. Use the column “Reduce speed AND alter course” for the wind force at which you would do both together. Choose “never” if you would not do it in that direction.',
       rows: SECTOR_KEYS.map((k, i) => ({ k, label: `${i + 1}  ${SECTORS[i]}` })),
       cols: [
-        { k: 'speed_ss', label: 'First reduce speed at', cls: 'c-speed', opts: SEA.map(s => o(s.v, `SS ${s.v} · ${s.sub}`)).concat([o('never', 'never')]) },
-        { k: 'course_ss', label: 'First alter course at', cls: 'c-course', opts: SEA.map(s => o(s.v, `SS ${s.v} · ${s.sub}`)).concat([o('never', 'never')]) },
+        { k: 'speed_bft', label: 'First reduce speed at', cls: 'c-speed', opts: BFT.map(b => o(b[0], `Bft ${b[0]} · waves ${b[3]} m`)).concat([o('never', 'never')]) },
+        { k: 'course_bft', label: 'First alter course at', cls: 'c-course', opts: BFT.map(b => o(b[0], `Bft ${b[0]} · waves ${b[3]} m`)).concat([o('never', 'never')]) },
+        { k: 'both_bft', label: 'Reduce speed AND alter course at', cls: 'c-both', opts: BFT.map(b => o(b[0], `Bft ${b[0]} · waves ${b[3]} m`)).concat([o('never', 'never')]) },
         { k: 'main_reason', label: 'Main reason', opts: EFFECTS.map((e, i) => o(String(i + 1), `${i + 1} ${e}`)).concat([o('cargo', 'risk to cargo'), o('other', 'other')]) }
       ] },
-    { type: 'grid21' },
-    { type: 'radio', key: 'q2_3_ballast', q: '2.3  In ballast, compared with fully loaded, you are:',
-      opts: [o('more', 'More cautious'), o('equal', 'Equally cautious'), o('less', 'Less cautious')] }
+    { type: 'grid21', key: 'q2_2', q: '2.2  What speed would you keep with the ship FULLY LOADED?' },
+    { type: 'grid21', key: 'q2_3', q: '2.3  What speed would you keep with the ship IN BALLAST?' }
   ]},
   { id: 'p3', title: '3  Limits for each effect',
     lead: 'Imagine the fully loaded ship from part 1. For each effect, write your LIMIT as a number (the point where it is no longer acceptable and you act) and what you do then.',
@@ -343,14 +378,13 @@ const PAGES = [
     ...[
       { type: 'radio', key: 'q4_0_same_ship', q: '4.0  Was it on the ship you described in part 1?',
         opts: [o('yes', 'Yes'), o('no', 'No, another ship')] },
-      { type: 'radio', key: 'q4_1_sea_state', q: '4.1  How rough was the sea when you decided to act?',
-        hint: 'Choose the sea state. The numbers below are the significant wave height Hs (the height of the bigger waves, as you would estimate it from the bridge).', opts: SEA },
+      { type: 'radio', key: 'q4_1_bft', q: '4.1  What was the wind force (Beaufort) when you decided to act?',
+        hint: 'Beaufort scale as in the introduction. The wave heights are a guide for the open sea.', opts: BFT_OPTS },
       { type: 'fields', sub: true, q: 'If you remember (optional)', fields: [
         { key: 'q4_1_wave_height_m', label: 'Wave height you estimated', unit: 'm' },
-        { key: 'q4_1_wave_period_s', label: 'Wave period', unit: 's' },
-        { key: 'q4_1_wind_bft', label: 'Wind force', unit: 'Bft' }] },
-      { type: 'radio', key: 'q4_2_wave_direction', q: '4.2  Before you acted, where were the waves coming from, relative to the bow?',
-        hint: 'Sectors as in the figure in the introduction (0° = waves straight on the bow).', opts: SECTOR_OPTS },
+        { key: 'q4_1_wave_period_s', label: 'Wave period', unit: 's' }] },
+      { type: 'select', key: 'q4_2_waves_deg', q: '4.2  Before you acted, where were the waves coming from, relative to the bow?',
+        hint: '0° = waves straight on the bow, 90° = on the beam, 180° = from astern. Port and starboard are treated the same.', opts: angleOpts([[0, 180]]) },
       { type: 'radio', key: 'q4_3_loading', q: '4.3  How was the ship loaded?',
         opts: [o('full', 'Fully loaded'), o('partly', 'Partly loaded'), o('ballast', 'In ballast')] },
       { type: 'radio', key: 'q4_4_main_reason', q: '4.4  What was the MAIN reason you decided to act?',
@@ -366,8 +400,8 @@ const PAGES = [
         { key: 'q4_5_speed_after_rpm', label: '(rpm after)', unit: 'rpm' }] },
       { type: 'fields', sub: true, q: 'Course: by how many degrees did you alter course?', showIf: a => a.q4_5_action === 'course' || a.q4_5_action === 'both',
         fields: [{ key: 'q4_5_altered_by_deg', label: 'Course altered by', unit: '°' }] },
-      { type: 'radio', sub: true, key: 'q4_5_new_wave_direction', q: 'After the alteration, the waves were coming from',
-        showIf: a => a.q4_5_action === 'course' || a.q4_5_action === 'both', opts: SECTOR_OPTS }
+      { type: 'select', sub: true, key: 'q4_5_new_waves_deg', q: 'After the alteration, the waves were coming from',
+        showIf: a => a.q4_5_action === 'course' || a.q4_5_action === 'both', opts: angleOpts([[0, 180]]) }
     ].map(it => Object.assign(it, { showIf: and(it.showIf, a => a.q4_no_experience !== 'yes') }))
   ]},
   { id: 'p5', title: '5  Comments', items: [
@@ -385,8 +419,8 @@ const app = document.getElementById('app');
 const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const save = () => store.set(DRAFT_KEY, JSON.stringify(A));
 
-const G21_ROWS = ['5', '6', '7', '8'];
-const G21_COLS = [['head', '1 head seas'], ['beam', '3 beam seas'], ['following', '5 following seas']];
+const G21_ROWS = ['6', '7', '8', '9'];
+const G21_COLS = [['head', '1 head seas'], ['beam', '3–4 beam seas'], ['following', '6 following seas']];
 
 /* Ključevi pitanja redom (stupci CSV-a); s "a" vraća samo one koji vrijede za dane odgovore */
 function itemKeys(it, a) {
@@ -394,14 +428,14 @@ function itemKeys(it, a) {
     case 'radio': return it.other && (!a || a[it.key] === 'other') ? [it.key, it.other] : [it.key];
     case 'fields': return it.fields.map(f => f.key);
     case 'selgrid': return it.rows.flatMap(r => it.cols.map(c => `${it.key}_${r.k}_${c.k}`));
-    case 'grid21': return ['q2_2_unit', ...G21_ROWS.flatMap(r => G21_COLS.map(c => `q2_2_ss${r}_${c[0]}`))];
+    case 'grid21': return [`${it.key}_unit`, ...G21_ROWS.flatMap(r => G21_COLS.map(c => `${it.key}_bft${r}_${c[0]}`))];
     case 'criterion': {
       const c = it.c, r = a && a[ck(c, 'response')];
-      return [ck(c, 'response'), ...(c.unknown ? [ck(c, 'cannot_estimate')] : []),
-        ...(!a || usesSpeed(r) ? [ck(c, 'speed_limit'), ...(c.g ? [ck(c, 'speed_limit_g')] : []), ck(c, 'speed_to_kn'), ck(c, 'speed_to_rpm')] : []),
-        ...(!a || usesCourse(r) ? [ck(c, 'course_limit'), ...(c.g ? [ck(c, 'course_limit_g')] : []), ck(c, 'waves_after')] : [])];
+      return [ck(c, 'response'), ...(c.gm ? [ck(c, 'gm_m')] : []),
+        ...(!a || usesSpeed(r) ? [ck(c, 'speed_limit'), ...(c.deg ? [ck(c, 'speed_limit_deg')] : []), ck(c, 'speed_pct')] : []),
+        ...(!a || usesCourse(r) ? [ck(c, 'course_limit'), ...(c.deg ? [ck(c, 'course_limit_deg')] : []), ck(c, 'course_waves_deg')] : [])];
     }
-    case 'check': case 'text': return [it.key];
+    case 'select': case 'check': case 'text': return [it.key];
     default: return [];
   }
 }
@@ -417,18 +451,23 @@ function textInput(key, unit, label) {
   return `<div class="field">${label ? `<label for="f_${key}">${esc(label)}</label>` : ''}<div class="uin"><input type="text" inputmode="decimal" id="f_${key}" name="${key}" autocomplete="off">${unit ? `<em>${esc(unit)}</em>` : ''}</div></div>`;
 }
 
+function selectHtml(name, opts, unit) {
+  return `<div class="uin" style="max-width:340px"><select name="${name}" aria-label="${esc(unit || name)}"><option value="">—</option>` +
+    opts.map(op => `<option value="${esc(op.v)}">${esc(op.l)}</option>`).join('') + `</select>${unit ? `<em>${esc(unit)}</em>` : ''}</div>`;
+}
+
 function waveFigure() {
-  const cx = 170, cy = 170, R = 140, r = 96, b = [0, 30, 70, 110, 150, 180];
+  const cx = 170, cy = 170, R = 140, r = 96, b = SECTOR_B;
   const pt = (deg, rad) => [cx + rad * Math.sin(deg * Math.PI / 180), cy - rad * Math.cos(deg * Math.PI / 180)];
   let s = '';
-  for (const side of [1, -1]) for (let i = 0; i < 5; i++) {
+  for (const side of [1, -1]) for (let i = 0; i < 6; i++) {
     const a0 = b[i] * side, a1 = b[i + 1] * side, sw = side > 0 ? 1 : 0;
     const [x0, y0] = pt(a0, R), [x1, y1] = pt(a1, R), [x2, y2] = pt(a1, r), [x3, y3] = pt(a0, r);
     s += `<path d="M${x0},${y0} A${R},${R} 0 0,${sw} ${x1},${y1} L${x2},${y2} A${r},${r} 0 0,${1 - sw} ${x3},${y3} Z" fill="var(${i % 2 ? '--sec-b' : '--sec-a'})" stroke="var(--card)" stroke-width="3"/>`;
     const [tx, ty] = pt((a0 + a1) / 2, (R + r) / 2);
     s += `<text class="tn" x="${tx}" y="${ty + 8}" text-anchor="middle">${i + 1}</text>`;
   }
-  for (const d of [0, 30, 70, 110, 150, 180, -30, -70, -110, -150]) {
+  for (const d of [0, 30, 60, 90, 120, 150, 180, -30, -60, -90, -120, -150]) {
     const [tx, ty] = pt(d, R + 16);
     s += `<text class="t" x="${tx}" y="${ty + 4}" text-anchor="middle">${Math.abs(d)}°</text>`;
   }
@@ -441,27 +480,26 @@ function renderCriterion(c) {
   const name = c.name.toLowerCase();
   const limit = (part, verb) => c.scale
     ? `<p class="q">Limit: I ${verb} when it reaches</p>${chips(ck(c, part), c.scale, c.wide)}` +
-      (c.g ? `<div class="fields" style="margin-top:10px">${textInput(ck(c, part + '_g'), 'g', 'measured acceleration (optional)')}</div>` : '')
+      (c.deg ? `<div class="fields lim" style="margin-top:10px">${textInput(ck(c, part + '_deg'), c.deg, 'If you know it, in degrees (optional)')}</div>` : '')
     : `<p class="q">Limit: I ${verb} at about</p><div class="fields lim">${textInput(ck(c, part), c.unit, '')}</div>`;
+  const speed = `<div class="panel speed" data-panel="speed">
+        <h4>${c.speedChange ? 'Speed change' : 'Speed reduction'}</h4>
+        ${limit('speed_limit', c.speedChange ? 'change speed' : 'reduce speed')}
+        <div class="step"><p class="q">Then I ${c.speedChange ? 'change' : 'reduce'} speed by about</p>${chips(ck(c, 'speed_pct'), SPEED_PCT)}</div>
+      </div>`;
+  const course = `<div class="panel course" data-panel="course">
+        <h4>Course alteration</h4>
+        ${limit('course_limit', 'alter course')}
+        <div class="step"><p class="q">Then I alter course so that the waves come from</p>${selectHtml(ck(c, 'course_waves_deg'), angleOpts(c.fine), 'off the bow')}
+          <p class="hint" style="margin:6px 0 0">0° = waves on the bow, 90° = on the beam, 180° = from astern.</p></div>
+      </div>`;
   return `<p class="ctitle">3.${c.n}  ${esc(c.name)}</p>` +
     (c.note ? `<div class="note">${c.note}</div>` : '') +
     (c.diagram ? `<div class="diag">${c.diagram}</div>` : '') +
+    (c.gm ? `<p class="q">GM of your ship for these answers</p><div class="fields lim" style="margin-bottom:16px">${textInput(ck(c, 'gm_m'), 'm', '')}</div>` : '') +
     `<p class="q">How do you usually respond to ${esc(name)}?</p>${chips(ck(c, 'response'), RESPONSES)}` +
     `<p class="hint" style="margin:10px 0 0">Then write your limits in the boxes below.</p>` +
-    (c.unknown ? `<label class="check" style="margin-top:12px;font-weight:500"><input type="checkbox" name="${ck(c, 'cannot_estimate')}" value="yes"><span>${esc(c.unknown)}</span></label>` : '') +
-    `<div class="panels">
-      <div class="panel speed" data-panel="speed">
-        <h4>Speed reduction</h4>
-        ${limit('speed_limit', 'reduce speed')}
-        <div class="step"><p class="q">Then I reduce speed and settle at about</p>
-          <div class="fields">${textInput(ck(c, 'speed_to_kn'), 'kn', 'speed')}${textInput(ck(c, 'speed_to_rpm'), 'rpm', 'or rpm')}</div></div>
-      </div>
-      <div class="panel course" data-panel="course">
-        <h4>Course alteration</h4>
-        ${limit('course_limit', 'alter course')}
-        <div class="step"><p class="q">After altering course, I try to have the waves coming from</p>${chips(ck(c, 'waves_after'), SECTOR_OPTS)}</div>
-      </div>
-    </div>`;
+    `<div class="panels">${c.courseFirst ? course + speed : speed + course}</div>`;
 }
 
 function introHtml() {
@@ -469,10 +507,10 @@ function introHtml() {
       <div class="card">
         <p class="ctitle">We are interested in when you reduce speed in heavy weather, when you alter course, when you do both, and by how much.</p>
         <p class="hint">The questionnaire is <b>anonymous</b> and takes about 10 minutes. There are no right or wrong answers. We do not ask for your name or contact details, and stored responses contain no IP address. Your answers are kept in this browser until you submit, so you can come back later.</p>
-        <p class="hint">Throughout the questionnaire, sea state and wave direction are given only as defined below.</p>
+        <p class="hint">Throughout the questionnaire, wind force (Beaufort) and wave direction are given only as defined below.</p>
       </div>
       <div class="note">You do not need to remember this page. While answering, you can open it again at any time with the button
-        <b>ⓘ Sea states &amp; wave directions</b> in the bottom-right corner of the screen.</div>
+        <b>ⓘ Beaufort scale &amp; wave directions</b> in the bottom-right corner of the screen.</div>
       ${refCards()}`;
 }
 
@@ -483,21 +521,20 @@ function refCards() {
         <p class="ctitle">Wave direction relative to the bow</p>
         <p class="hint">0° = waves directly on the bow. Port and starboard sides are treated the same.</p>
         <div class="figwrap">${waveFigure()}
-          <ul class="legend">${SECTORS.map((s, i) => `<li><b>${i + 1}</b>${s} <span class="hint">(${[0, 30, 70, 110, 150][i]}–${[30, 70, 110, 150, 180][i]}°)</span></li>`).join('')}</ul>
+          <ul class="legend">${SECTORS.map((s, i) => `<li><b>${i + 1}</b>${s} <span class="hint">(${SECTOR_B[i]}–${SECTOR_B[i + 1]}°)</span></li>`).join('')}</ul>
         </div>
       </div>
       <div class="card">
-        <p class="ctitle">Sea state (WMO)</p>
-        <table class="g"><tr><th>Sea state</th><th>Description</th><th>Significant wave height Hs</th></tr>
-        ${[['4', 'moderate', '1.25 – 2.5 m'], ['5', 'rough', '2.5 – 4 m'], ['6', 'very rough', '4 – 6 m'], ['7', 'high', '6 – 9 m'], ['8', 'very high', '9 – 14 m'], ['9', 'phenomenal', 'over 14 m']]
-          .map(r => `<tr><td><b>${r[0]}</b></td><td>${r[1]}</td><td>Hs ${r[2]}</td></tr>`).join('')}
-        </table>
-        <p class="hint" style="margin-top:10px">Sea states 0 – 3 (Hs up to 1.25 m) are not considered.</p>
+        <p class="ctitle">Wind force – Beaufort scale</p>
+        <div style="overflow-x:auto"><table class="g"><tr><th>Beaufort</th><th>Description</th><th>Wind speed</th><th>Typical wave height (open sea)</th></tr>
+        ${BFT.map(b => `<tr><td><b>${b[0]}</b></td><td>${b[1]}</td><td>${b[2]} kn</td><td>${b[3]} m</td></tr>`).join('')}
+        </table></div>
+        <p class="hint" style="margin-top:10px">Beaufort 0 – 4 are not considered. Wave heights are the WMO probable – maximum heights in the open sea, far from land.</p>
       </div>
       <div class="card">
         <p class="ctitle">The six effects</p>
-        <p class="hint">In part 3 you give, for each effect, the limit at which you reduce speed and the limit at which you alter course.</p>
-        <ul class="legend">${EFFECTS.map((e, i) => `<li><b>${i + 1}</b>${e}</li>`).join('')}</ul>
+        <p class="hint">In part 3 you give, for each effect, the limit at which you change speed and the limit at which you alter course.</p>
+        <ul class="legend effects">${EFFECTS.map((e, i) => `<li><b>${i + 1}</b><span><b class="en">${e[0].toUpperCase() + e.slice(1)}</b> – ${EFFECT_DESC[i]}</span></li>`).join('')}</ul>
       </div>`;
 }
 
@@ -507,6 +544,7 @@ function renderItem(it) {
     case 'radio': return `<p class="q">${esc(it.q)}</p>${it.hint ? `<p class="hint">${esc(it.hint)}</p>` : ''}${chips(it.key, it.opts)}` +
       (it.other ? `<div class="other" data-other-for="${it.key}"><input type="text" name="${it.other}" placeholder="please specify" aria-label="Other – please specify"></div>` : '');
     case 'fields': return `<p class="q">${esc(it.q)}</p>${it.hint ? `<p class="hint">${esc(it.hint)}</p>` : ''}<div class="fields">${it.fields.map(f => textInput(f.key, f.unit, f.label)).join('')}</div>`;
+    case 'select': return `<p class="q">${esc(it.q)}</p>${it.hint ? `<p class="hint">${esc(it.hint)}</p>` : ''}${selectHtml(it.key, it.opts, 'off the bow')}`;
     case 'check': return `<label class="check"><input type="checkbox" name="${it.key}" value="yes"><span>${esc(it.label)}</span></label>`;
     case 'text': return `<p class="q">${esc(it.q)}</p><p class="hint">${esc(it.hint)}</p><textarea name="${it.key}" maxlength="4000"></textarea>`;
     case 'selgrid': return `<p class="q">${esc(it.q)}</p><p class="hint">${esc(it.hint)}</p>
@@ -514,13 +552,13 @@ function renderItem(it) {
       ${it.rows.map(r => `<div class="sg-row"><div class="rlab">${esc(r.label)}</div>${it.cols.map(c => `<div><span class="cl">${esc(c.label)}</span>
         <select name="${it.key}_${r.k}_${c.k}" aria-label="${esc(r.label)} – ${esc(c.label)}"><option value="">—</option>${c.opts.map(op => `<option value="${esc(op.v)}">${esc(op.l)}</option>`).join('')}</select></div>`).join('')}</div>`).join('')}
       </div>`;
-    case 'grid21': return `<p class="q">2.2  What speed would you keep with the ship fully loaded?</p>
-      <p class="hint">Write the speed you would deliberately keep (sectors 1, 3 and 5 only). If you think in rpm, write rpm instead and mark it here:</p>
-      ${chips('q2_2_unit', [o('kn', 'I give knots (kn)'), o('rpm', 'I give rpm')])}
-      <div style="overflow-x:auto;margin-top:14px"><table class="g"><tr><th>Sea state</th>${G21_COLS.map(c => `<th>${c[1]}</th>`).join('')}</tr>
-      ${G21_ROWS.map(r => `<tr><td class="rl"><b>${r}</b><small>${SEA.find(s => s.v === r).sub}</small></td>${G21_COLS.map(c =>
-        `<td><input type="text" inputmode="decimal" name="q2_2_ss${r}_${c[0]}" aria-label="sea state ${r}, ${c[1]}" autocomplete="off"></td>`).join('')}</tr>`).join('')}
-      </table></div><p class="hint" style="margin-top:8px" id="g21unit"></p>`;
+    case 'grid21': return `<p class="q">${esc(it.q)}</p>
+      <p class="hint">Write the speed you would deliberately keep (head, beam and following seas only). If you think in rpm, write rpm instead and mark it here:</p>
+      ${chips(it.key + '_unit', [o('kn', 'I give knots (kn)'), o('rpm', 'I give rpm')])}
+      <div style="overflow-x:auto;margin-top:14px"><table class="g"><tr><th>Wind force</th>${G21_COLS.map(c => `<th>${c[1]}</th>`).join('')}</tr>
+      ${G21_ROWS.map(r => `<tr><td class="rl"><b>Bft ${r}</b><small>waves ${BFT.find(b => b[0] === r)[3]} m</small></td>${G21_COLS.map(c =>
+        `<td><input type="text" inputmode="decimal" name="${it.key}_bft${r}_${c[0]}" aria-label="Beaufort ${r}, ${c[1]}" autocomplete="off"></td>`).join('')}</tr>`).join('')}
+      </table></div><p class="hint" style="margin-top:8px" data-unit-for="${it.key}_unit"></p>`;
     case 'criterion': return renderCriterion(it.c);
     case 'submit': return `<p class="q">Ready to submit?</p><p class="hint" id="answeredInfo"></p>
       <button class="btn" id="submitBtn" type="button">Submit my answers</button><div class="msg" id="submitMsg" role="status"></div>`;
@@ -575,8 +613,7 @@ function refresh() {
     }
   });
   app.querySelectorAll('[data-other-for]').forEach(el => el.classList.toggle('hidden', A[el.dataset.otherFor] !== 'other'));
-  const u = document.getElementById('g21unit');
-  if (u) u.textContent = A.q2_2_unit === 'rpm' ? 'Values in the table are rpm.' : 'Values in the table are knots.';
+  app.querySelectorAll('[data-unit-for]').forEach(el => el.textContent = A[el.dataset.unitFor] === 'rpm' ? 'Values in the table are rpm.' : 'Values in the table are knots.');
   const info = document.getElementById('answeredInfo');
   if (info) {
     const n = Object.keys(collect()).length;
@@ -746,23 +783,24 @@ function codebook() {
     if (it.type === 'radio') {
       rows.push([it.key, it.q, optList(it.opts)]);
       if (it.other) rows.push([it.other, it.q + ' – other (text)', 'free text']);
-    } else if (it.type === 'fields') it.fields.forEach(f => rows.push([f.key, it.q + ' – ' + f.label, 'number, ' + f.unit]));
+    } else if (it.type === 'select') rows.push([it.key, it.q, 'wave direction, degrees off the bow: ' + optList(it.opts)]);
+    else if (it.type === 'fields') it.fields.forEach(f => rows.push([f.key, it.q + ' – ' + f.label, 'number, ' + f.unit]));
     else if (it.type === 'selgrid') it.rows.forEach(r => it.cols.forEach(c => rows.push([`${it.key}_${r.k}_${c.k}`, `${it.q.split('  ')[0]} ${r.label} – ${c.label}`, optList(c.opts)])));
     else if (it.type === 'grid21') {
-      rows.push(['q2_2_unit', '2.2 unit of the values', 'kn | rpm']);
-      G21_ROWS.forEach(r => G21_COLS.forEach(c => rows.push([`q2_2_ss${r}_${c[0]}`, `2.2 speed kept – sea state ${r}, ${c[1]}`, 'number (unit in q2_2_unit)'])));
+      const n = it.q.split('  ')[0];
+      rows.push([`${it.key}_unit`, `${n} unit of the values`, 'kn | rpm']);
+      G21_ROWS.forEach(r => G21_COLS.forEach(c => rows.push([`${it.key}_bft${r}_${c[0]}`, `${it.q} – Bft ${r}, ${c[1]}`, `number (unit in ${it.key}_unit)`])));
     } else if (it.type === 'criterion') {
-      const c = it.c, t = `3.${c.n} ${c.name}`;
+      const c = it.c, t = `3.${c.n} ${c.name}`, sp = c.speedChange ? 'speed change' : 'speed reduction';
       rows.push([ck(c, 'response'), `${t} – usual response`, optList(RESPONSES)]);
       const vals = c.scale ? optList(c.scale) : `number, ${c.unit}`;
-      if (c.unknown) rows.push([ck(c, 'cannot_estimate'), `${t} – ${c.unknown}`, 'yes | (empty)']);
-      rows.push([ck(c, 'speed_limit'), `${t} – limit for speed reduction (${c.measure})`, vals]);
-      if (c.g) rows.push([ck(c, 'speed_limit_g'), `${t} – limit for speed reduction, measured`, 'number, g']);
-      rows.push([ck(c, 'speed_to_kn'), `${t} – speed reduced to`, 'number, kn']);
-      rows.push([ck(c, 'speed_to_rpm'), `${t} – speed reduced to`, 'number, rpm']);
+      if (c.gm) rows.push([ck(c, 'gm_m'), `${t} – GM of the ship for these answers`, 'number, m']);
+      rows.push([ck(c, 'speed_limit'), `${t} – limit for ${sp} (${c.measure})`, vals]);
+      if (c.deg) rows.push([ck(c, 'speed_limit_deg'), `${t} – limit for ${sp}, in degrees (optional)`, 'number, ' + c.deg]);
+      rows.push([ck(c, 'speed_pct'), `${t} – ${sp} by`, optList(SPEED_PCT)]);
       rows.push([ck(c, 'course_limit'), `${t} – limit for course alteration (${c.measure})`, vals]);
-      if (c.g) rows.push([ck(c, 'course_limit_g'), `${t} – limit for course alteration, measured`, 'number, g']);
-      rows.push([ck(c, 'waves_after'), `${t} – preferred wave direction after alteration`, optList(SECTOR_OPTS)]);
+      if (c.deg) rows.push([ck(c, 'course_limit_deg'), `${t} – limit for course alteration, in degrees (optional)`, 'number, ' + c.deg]);
+      rows.push([ck(c, 'course_waves_deg'), `${t} – after course alteration, waves come from (degrees off the bow)`, optList(angleOpts(c.fine))]);
     }
     else if (it.type === 'check') rows.push([it.key, it.label, 'yes | (empty)']);
     else if (it.type === 'text') rows.push([it.key, it.q, 'free text']);
