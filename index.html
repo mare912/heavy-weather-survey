@@ -206,7 +206,7 @@ dialog.ref::backdrop{background:rgba(5,12,24,.55)}
 /* ===== Postavke: adresa Supabase projekta i javni (publishable) ključ ===== */
 const SUPABASE_URL = 'https://qdzimszxuzkunbbzuxmh.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_PYwX1e_TjtEQcDYPWnisEg_GWzrlZJH';
-const SURVEY_VERSION = 'v5';
+const SURVEY_VERSION = 'v6';
 /* ========================================================================== */
 
 const DEMO = SUPABASE_URL.includes('YOUR-PROJECT');
@@ -234,7 +234,7 @@ const SECTOR_B = [0, 30, 60, 90, 120, 150, 180];
 const EFFECTS = ['bow slamming', 'green water on deck', 'propeller emergence', 'rolling', 'pitching', 'accelerations on the bridge'];
 const EFFECT_DESC = [
   'the bow comes out of a wave and hits the water hard, so the whole ship shudders.',
-  'solid water (not spray) comes over the bow or bulwark onto the deck – also called solid water or boarding seas.',
+  'solid water (not spray) comes over the bow or bulwark onto the deck – also called solid water, boarding seas or shipping seas.',
   'the propeller comes partly out of the water and the engine races.',
   'the ship heels from side to side, to port and to starboard.',
   'the bow rises and falls in the waves (bow up, bow down).',
@@ -271,7 +271,6 @@ const ACC = [
 ];
 /* Opisna skala posrtanja (sinteza: Chen i sur. 2020, NORDFORSK 1987, OPNAVINST 3100.7C) */
 const PITCH = [
-  o('0', '0 · NO PITCHING', 'barely noticeable, normal work and walking (< 1°)'),
   o('1', '1 · SLIGHT', 'bow rises and falls rhythmically, no spray over the bow (1–2°)'),
   o('2', '2 · MODERATE', 'spray over the bow, you hold on when walking (2–4°)'),
   o('3', '3 · HEAVY', 'occasional green water and slamming, deck work limited (4–6°)'),
@@ -315,8 +314,8 @@ const CRITERIA = [
   /* fine = rasponi smjera valova (° od pramca) s finom podjelom po 5°; courseFirst = okvir za kurs lijevo */
   { n: 1, slug: 'slamming', name: 'Bow slamming', unit: 'slams in 10 min', measure: 'number of slams in 10 minutes', fine: [[0, 45]],
     note: '<b>Slam:</b> the bow hits the water hard and the whole ship shudders.<br>Write the <b>number of slams in 10 minutes</b> (approximately).' },
-  { n: 2, slug: 'green_water', name: 'Green water on deck (solid water / boarding seas)', unit: 'times in 10 min', measure: 'number of times green water comes on deck in 10 minutes', fine: [[0, 45]],
-    note: '<b>Green water (solid water, boarding seas):</b> solid water (not spray) coming on deck over the bow or bulwark.<br>Write <b>how many times in 10 minutes</b> (approximately).' },
+  { n: 2, slug: 'green_water', name: 'Green water on deck (solid water / boarding seas / shipping seas)', unit: 'times in 10 min', measure: 'number of times green water comes on deck in 10 minutes', fine: [[0, 45]],
+    note: '<b>Green water (solid water, boarding seas, shipping seas):</b> solid water (not spray) coming on deck over the bow or bulwark.<br>Write <b>how many times in 10 minutes</b> (approximately).' },
   { n: 3, slug: 'prop_emergence', name: 'Propeller emergence (racing)', unit: 'times in 10 min', measure: 'number of propeller emergences in 10 minutes',
     speedChange: true, fine: [[0, 45], [135, 180]],
     note: '<b>Propeller emergence:</b> the propeller comes out of the water and the engine races.<br>Write <b>how many times in 10 minutes</b> (approximately).' },
@@ -324,7 +323,7 @@ const CRITERIA = [
     courseFirst: true, speedChange: true, fine: [[45, 135]],
     note: 'Write the <b>roll angle in degrees, to ONE side</b>, from upright (0°), as read on the inclinometer. It is <b>not</b> the total swing from port to starboard.<br>' +
           'Example: rolling 15° to port and 15° to starboard → write <b>15</b> (not 30).', diagram: ROLL_SVG },
-  { n: 5, slug: 'pitching', name: 'Pitching', scale: PITCH, wide: true, deg: '° pitch', measure: 'pitching level (0–4)',
+  { n: 5, slug: 'pitching', name: 'Pitching', scale: PITCH, wide: true, deg: '° pitch', measure: 'pitching level (1–4)',
     courseFirst: true, fine: [[0, 45]],
     note: 'Choose the description that fits best. The degrees in brackets are only a guide: the <b>usual largest angle the bow goes up OR down</b> from level trim (not up plus down).<br>' +
           'If you know the pitch angle in degrees (e.g. from a motion indicator), write it in the box as well.', diagram: PITCH_SVG },
@@ -354,7 +353,7 @@ const PAGES = [
       { key: 'q1_4_roll_period_s', label: 'Roll period (if known)', unit: 's' },
       { key: 'q1_4_gm_m', label: 'GM (if known)', unit: 'm' }] },
     { type: 'radio', sub: true, key: 'q1_4_propeller', q: 'Propeller',
-      opts: [o('fixed_pitch', 'Fixed pitch'), o('cpp', 'Controllable pitch (CPP)')] }
+      opts: [o('fixed_pitch', 'Fixed pitch'), o('cpp', 'Controllable pitch (CPP)'), o('azimuth', 'Azimuth thrusters / pods')] }
   ]},
   { id: 'p2', title: '2  When do you first act?', lead: 'Imagine the ship from part 1, fully loaded.', items: [
     { type: 'selgrid', key: 'q2_1', q: '2.1  At which wind force do you FIRST reduce speed, FIRST alter course, or FIRST do both?',
@@ -419,7 +418,7 @@ const app = document.getElementById('app');
 const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const save = () => store.set(DRAFT_KEY, JSON.stringify(A));
 
-const G21_ROWS = ['6', '7', '8', '9'];
+const G21_ROWS = ['6', '7', '8', '9', '10', '11', '12'];
 const G21_COLS = [['head', '1 head seas'], ['beam', '3–4 beam seas'], ['following', '6 following seas']];
 
 /* Ključevi pitanja redom (stupci CSV-a); s "a" vraća samo one koji vrijede za dane odgovore */
